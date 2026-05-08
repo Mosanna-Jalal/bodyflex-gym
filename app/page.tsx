@@ -108,15 +108,11 @@ export default function Home() {
       <section id="home" className="relative isolate overflow-hidden border-b border-white/10">
         <div className="absolute inset-0 -z-10 bg-[linear-gradient(115deg,#000_0%,#050505_42%,#171409_100%)]" />
         <div className="absolute inset-x-0 top-0 -z-10 h-px bg-yellow-400/80" />
+        <HeroModel />
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,rgba(0,0,0,0.18)_0%,rgba(0,0,0,0.28)_34%,rgba(0,0,0,0.82)_76%,#000_100%)] lg:bg-[linear-gradient(90deg,#000_0%,rgba(0,0,0,0.88)_38%,rgba(0,0,0,0.38)_68%,rgba(0,0,0,0.62)_100%)]" />
 
-        <div className="mx-auto grid min-h-[calc(100vh-73px)] max-w-7xl items-start gap-5 px-5 pb-12 pt-4 sm:px-6 sm:pt-8 lg:grid-cols-[0.88fr_1.12fr] lg:items-center lg:gap-10 lg:py-12">
-          <div className="relative order-1 min-h-[330px] sm:min-h-[430px] lg:order-2 lg:min-h-[650px]">
-            <div className="absolute inset-x-8 top-10 h-24 rounded-[50%] bg-yellow-400/20 blur-3xl lg:top-auto lg:bottom-16" />
-            <div className="absolute inset-x-10 top-56 h-16 rounded-[50%] bg-black blur-2xl sm:top-72 lg:bottom-10 lg:top-auto" />
-            <HeroModel />
-          </div>
-
-          <div className="order-2 max-w-2xl pt-2 sm:pt-0 lg:order-1">
+        <div className="pointer-events-none relative z-10 mx-auto grid min-h-[calc(100vh-73px)] max-w-7xl items-end px-5 pb-12 pt-[360px] sm:px-6 sm:pt-[460px] lg:items-center lg:py-16 lg:pt-16">
+          <div className="pointer-events-auto max-w-2xl">
             <p className="mb-5 inline-flex rounded-lg border border-yellow-400/30 bg-yellow-400/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.24em] text-yellow-300">
               Strength. Conditioning. Recovery.
             </p>

@@ -12,6 +12,7 @@ type ModelViewerProps = DetailedHTMLProps<
   "interaction-prompt"?: string;
   "shadow-intensity"?: string;
   exposure?: string;
+  orientation?: string;
   "camera-orbit"?: string;
   "field-of-view"?: string;
 };
