@@ -122,7 +122,7 @@ export default function HeroModel() {
       <div className="absolute bottom-10 left-1/2 h-20 w-[76vw] -translate-x-1/2 rounded-[50%] bg-black blur-2xl" />
       <model-viewer
         ref={modelRef}
-        src="/hero%20section/dumbbel_free.glb"
+        src="https://res.cloudinary.com/dvjavfija/raw/upload/v1778762902/ar-fitness/3d-models/dumbbel_free.glb"
         alt="Animated 3D dumbbell model"
         autoplay
         interaction-prompt="none"
