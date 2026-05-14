@@ -222,15 +222,14 @@ export default async function Home() {
 
             {/* Heading — full content width, single line */}
             <h1
-              className="font-oswald animate-fade-in-up"
+              className="font-oswald animate-fade-in-up lg:whitespace-nowrap"
               style={{
-                fontSize: "clamp(2rem, 4.3vw, 5rem)",
+                fontSize: "clamp(2.2rem, 4.3vw, 5rem)",
                 fontWeight: 700,
                 letterSpacing: "0.02em",
-                lineHeight: 1,
+                lineHeight: 1.08,
                 color: "#fff",
                 textTransform: "uppercase",
-                whiteSpace: "nowrap",
                 textShadow: "0 4px 40px rgba(0,0,0,0.95), 0 2px 10px rgba(0,0,0,0.9)",
                 marginBottom: "1.2rem",
               }}
