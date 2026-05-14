@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 
 export default function HeroModel() {
   const modelRef = useRef<HTMLElement>(null);
+  const [loaded, setLoaded] = useState(false);
   const motionRef = useRef({
     active: false,
     startX: 0,
@@ -53,10 +54,15 @@ export default function HeroModel() {
     window.addEventListener("scroll", requestUpdate, { passive: true });
     window.addEventListener("resize", requestUpdate);
 
+    const model = modelRef.current;
+    const handleLoad = () => setLoaded(true);
+    model?.addEventListener("load", handleLoad);
+
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("scroll", requestUpdate);
       window.removeEventListener("resize", requestUpdate);
+      model?.removeEventListener("load", handleLoad);
     };
   }, []);
 
@@ -120,6 +126,21 @@ export default function HeroModel() {
     >
       <div className="absolute left-1/2 top-20 h-28 w-[82vw] -translate-x-1/2 rounded-[50%] bg-yellow-400/24 blur-3xl lg:top-36" />
       <div className="absolute bottom-10 left-1/2 h-20 w-[76vw] -translate-x-1/2 rounded-[50%] bg-black blur-2xl" />
+
+      {/* Skeleton shown while GLB streams in */}
+      {!loaded && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          <div
+            className="rounded-full animate-pulse"
+            style={{
+              width: "min(42vw, 320px)",
+              height: "min(42vw, 320px)",
+              background: "radial-gradient(circle, rgba(185,28,28,0.08) 0%, rgba(255,255,255,0.03) 60%, transparent 100%)",
+            }}
+          />
+        </div>
+      )}
+
       <model-viewer
         ref={modelRef}
         src="https://res.cloudinary.com/dvjavfija/raw/upload/v1778762902/ar-fitness/3d-models/dumbbel_free.glb"
@@ -131,7 +152,8 @@ export default function HeroModel() {
         orientation="-8deg 18deg 0deg"
         camera-orbit="18deg 68deg 4.7m"
         field-of-view="28deg"
-        className="relative z-10 h-full w-full opacity-80"
+        className="relative z-10 h-full w-full"
+        style={{ opacity: loaded ? 0.8 : 0, transition: "opacity 0.6s ease" }}
       />
     </div>
   );

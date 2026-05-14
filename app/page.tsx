@@ -6,6 +6,7 @@ import GymPresence from "./components/GymPresence";
 import ComplaintForm from "./components/ComplaintForm";
 import NavDropdown from "./components/NavDropdown";
 import MusicPlayer from "./components/MusicPlayer";
+import MobileNav from "./components/MobileNav";
 import { getSessionUserId } from "@/app/lib/session";
 import {
   listItems,
@@ -145,7 +146,7 @@ export default async function Home() {
             </nav>
 
             <div className="flex items-center gap-4">
-              {/* Admin entry — discrete, owner-facing */}
+              {/* Admin entry — discrete, desktop only */}
               <a
                 href="/admin/login"
                 className="hidden lg:inline-flex items-center gap-1.5 transition-opacity hover:opacity-100"
@@ -164,13 +165,17 @@ export default async function Home() {
                 MGMT
               </a>
 
+              {/* Join Now — desktop only; mobile version lives in drawer */}
               <a
                 href="#portal"
-                className="font-bebas inline-flex min-h-11 items-center justify-center px-7 text-[0.95rem] text-white transition hover:opacity-85"
+                className="hidden lg:inline-flex font-bebas min-h-11 items-center justify-center px-7 text-[0.95rem] text-white transition hover:opacity-85"
                 style={{ letterSpacing: "0.14em", background: "#b91c1c" }}
               >
                 Join Now
               </a>
+
+              {/* Mobile hamburger + drawer */}
+              <MobileNav memberId={!!memberId} classes={classes.map((c) => c.name)} />
             </div>
           </div>
         </header>
