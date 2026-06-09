@@ -138,7 +138,7 @@ export default function BgGymAnimation() {
     >
       <model-viewer
         id="bg-gym-model"
-        src="/bg-gym-animation/ruang_gym.glb"
+        src="/bg-gym-animation/ruang_gym.glb?v=3-1024"
         alt="3D gym interior"
         autoplay
         interaction-prompt="none"
