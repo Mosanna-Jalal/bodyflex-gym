@@ -1,4 +1,5 @@
 import Script from "next/script";
+import Preloader from "./components/Preloader";
 import BgGymAnimation from "./BgGymAnimation";
 import UserPortal from "./UserPortal";
 import OfferPopup from "./components/OfferPopup";
@@ -45,6 +46,9 @@ export default async function Home() {
         strategy="afterInteractive"
         type="module"
       />
+
+      {/* Loading gate — covers the page until the 3D gym model is ready */}
+      <Preloader />
 
       {/* Offer popup — client only */}
       <OfferPopup />

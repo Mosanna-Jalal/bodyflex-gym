@@ -33,32 +33,48 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You must be logged in." }, { status: 401 });
     }
 
-    const { date, exercise, minutes } = await request.json();
-    const cleanDate = String(date || "").trim();
-    const cleanExercise = String(exercise || "").trim();
-    const cleanMinutes = Number(minutes);
+    const body = await request.json();
+    const cleanDate = String(body.date || "").trim();
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
       return NextResponse.json({ error: "Choose a valid workout date." }, { status: 400 });
     }
 
-    if (cleanExercise.length < 2) {
-      return NextResponse.json({ error: "Add the exercise you did." }, { status: 400 });
+    // Accept either a single { exercise, minutes } or a batch { entries: [...] }.
+    const rawEntries = Array.isArray(body.entries)
+      ? body.entries
+      : [{ exercise: body.exercise, minutes: body.minutes }];
+
+    const now = new Date();
+    const docs = [];
+
+    for (const entry of rawEntries) {
+      const cleanExercise = String(entry?.exercise || "").trim();
+      const cleanMinutes = Number(entry?.minutes);
+
+      if (cleanExercise.length < 2) {
+        return NextResponse.json({ error: "Add the exercise you did." }, { status: 400 });
+      }
+
+      if (!Number.isFinite(cleanMinutes) || cleanMinutes <= 0 || cleanMinutes > 600) {
+        return NextResponse.json({ error: "Minutes must be between 1 and 600." }, { status: 400 });
+      }
+
+      docs.push({
+        userId,
+        date: cleanDate,
+        exercise: cleanExercise,
+        minutes: Math.round(cleanMinutes),
+        createdAt: now,
+      });
     }
 
-    if (!Number.isFinite(cleanMinutes) || cleanMinutes <= 0 || cleanMinutes > 600) {
-      return NextResponse.json({ error: "Minutes must be between 1 and 600." }, { status: 400 });
+    if (docs.length === 0) {
+      return NextResponse.json({ error: "Add at least one exercise." }, { status: 400 });
     }
 
     const workouts = await workoutsCollection();
-
-    await workouts.insertOne({
-      userId,
-      date: cleanDate,
-      exercise: cleanExercise,
-      minutes: Math.round(cleanMinutes),
-      createdAt: new Date(),
-    });
+    await workouts.insertMany(docs);
 
     const logs = await workouts
       .find({ userId }, { projection: { _id: 0 } })

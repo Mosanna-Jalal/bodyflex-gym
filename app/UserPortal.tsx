@@ -21,25 +21,92 @@ type WeightLog = {
   date: string;
   weight: number;
   unit: string;
+  notes?: string;
+  constipation?: string;
 };
 
 const today = new Date().toISOString().slice(0, 10);
+
+/* The 8 trackable muscle groups / exercise types. */
+const CATEGORIES = [
+  "chest",
+  "biceps",
+  "back",
+  "shoulder",
+  "triceps",
+  "legs",
+  "cardio",
+  "mix",
+] as const;
+type Category = (typeof CATEGORIES)[number];
+
+/* Distinct colour per category for chart segments + legends. */
+const CATEGORY_COLOR: Record<Category, string> = {
+  chest: "#38bdf8",
+  biceps: "#818cf8",
+  back: "#34d399",
+  shoulder: "#fbbf24",
+  triceps: "#f472b6",
+  legs: "#fb923c",
+  cardio: "#f87171",
+  mix: "#a3a3a3",
+};
+
+type EntryRow = { category: Category; minutes: string };
+
+/* Constipation severity for daily weight logs. */
+const CONSTIPATION_LEVELS = ["none", "mild", "moderate", "severe"] as const;
+type Constipation = (typeof CONSTIPATION_LEVELS)[number];
+const CONSTIPATION_COLOR: Record<Constipation, string> = {
+  none: "#34d399",
+  mild: "#fbbf24",
+  moderate: "#fb923c",
+  severe: "#f87171",
+};
+const CONSTIPATION_LABEL: Record<Constipation, string> = {
+  none: "No constipation",
+  mild: "Mild",
+  moderate: "Moderate",
+  severe: "Severe",
+};
+
+/* Map any stored exercise string into one of the 8 categories so older,
+   free-text logs still render in the per-group charts. */
+function categorize(exercise: string): Category {
+  const e = exercise.toLowerCase();
+  if (CATEGORIES.includes(e as Category)) return e as Category;
+  if (e.includes("chest")) return "chest";
+  if (e.includes("bicep")) return "biceps";
+  if (e.includes("back")) return "back";
+  if (e.includes("shoulder")) return "shoulder";
+  if (e.includes("tricep")) return "triceps";
+  if (e.includes("leg")) return "legs";
+  if (e.includes("cardio") || e.includes("run") || e.includes("hiit")) return "cardio";
+  return "mix";
+}
+
+function nextCategory(used: EntryRow[]): Category {
+  const taken = new Set(used.map((r) => r.category));
+  return CATEGORIES.find((c) => !taken.has(c)) ?? "mix";
+}
 
 export default function UserPortal() {
   const [mode, setMode] = useState<"register" | "login">("register");
   const [user, setUser] = useState<User | null>(null);
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [referredBy, setReferredBy] = useState("");
   const [goalsText, setGoalsText] = useState("");
   const [workoutDate, setWorkoutDate] = useState(today);
-  const [exercise, setExercise] = useState("");
-  const [minutes, setMinutes] = useState("45");
+  const [entries, setEntries] = useState<EntryRow[]>([{ category: "chest", minutes: "45" }]);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
   const [weightDate, setWeightDate] = useState(today);
   const [weightValue, setWeightValue] = useState("");
   const [weightUnit, setWeightUnit] = useState<"kg" | "lbs">("kg");
+  const [weightNotes, setWeightNotes] = useState("");
+  const [weightConstipation, setWeightConstipation] = useState<Constipation>("none");
   const [rightTab, setRightTab] = useState<"workouts" | "weight">("workouts");
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
@@ -142,22 +209,42 @@ export default function UserPortal() {
     }
   }
 
+  function addEntryRow() {
+    setEntries((rows) => (rows.length >= CATEGORIES.length ? rows : [...rows, { category: nextCategory(rows), minutes: "30" }]));
+  }
+
+  function removeEntryRow(index: number) {
+    setEntries((rows) => (rows.length > 1 ? rows.filter((_, i) => i !== index) : rows));
+  }
+
+  function updateEntryRow(index: number, patch: Partial<EntryRow>) {
+    setEntries((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
   async function saveWorkout(event: { preventDefault(): void }) {
     event.preventDefault();
+    const payload = entries
+      .map((row) => ({ exercise: row.category, minutes: Number(row.minutes) }))
+      .filter((row) => row.exercise && Number.isFinite(row.minutes) && row.minutes > 0);
+
+    if (payload.length === 0) {
+      setMessage("Add at least one exercise with minutes.");
+      return;
+    }
+
     setIsBusy(true);
     setMessage("");
     try {
       const res = await fetch("/api/workouts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: workoutDate, exercise, minutes }),
+        body: JSON.stringify({ date: workoutDate, entries: payload }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save workout.");
       setLogs(data.logs || []);
-      setExercise("");
-      setMinutes("45");
-      setMessage("Workout logged.");
+      setEntries([{ category: "chest", minutes: "45" }]);
+      setMessage(`Logged ${payload.length} exercise${payload.length > 1 ? "s" : ""}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save workout.");
     } finally {
@@ -174,12 +261,20 @@ export default function UserPortal() {
       const res = await fetch("/api/weight", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: weightDate, weight: Number(weightValue), unit: weightUnit }),
+        body: JSON.stringify({
+          date: weightDate,
+          weight: Number(weightValue),
+          unit: weightUnit,
+          notes: weightNotes,
+          constipation: weightConstipation,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save weight.");
       setWeightLogs(data.logs || []);
       setWeightValue("");
+      setWeightNotes("");
+      setWeightConstipation("none");
       setMessage("Weight logged.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save weight.");
@@ -206,16 +301,16 @@ export default function UserPortal() {
   }
 
   return (
-    <section id="portal" style={{ background: "transparent" }}>
+    <section id="portal" style={{ background: "rgba(6,6,14,0.62)" }}>
       <div className="mx-auto max-w-7xl px-5 py-20 sm:px-6">
         <div className="mb-10 grid gap-6 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
           <div>
-            <p className="section-label text-white/60">Member Tracker</p>
-            <h2 className="font-oswald mt-3 text-5xl font-bold uppercase leading-none text-white sm:text-6xl">
+            <p className="section-label readable text-white/70">Member Tracker</p>
+            <h2 className="font-oswald readable mt-3 text-5xl font-bold uppercase leading-none text-white sm:text-6xl">
               Register, Set Goals, Track Progress.
             </h2>
           </div>
-          <p className="font-barlow max-w-2xl text-lg leading-7 text-zinc-400 lg:justify-self-end">
+          <p className="font-barlow readable max-w-2xl text-lg leading-7 text-white/85 lg:justify-self-end">
             Create your member ID, save training goals, log every gym day, and watch your progress grow.
           </p>
         </div>
@@ -254,14 +349,34 @@ export default function UserPortal() {
               />
 
               <label className="mt-5 block text-sm font-bold text-white" htmlFor="password">Password</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
-                className="mt-2 min-h-12 w-full rounded-lg border border-white/10 bg-white px-4 text-sm font-semibold text-black outline-none transition focus:border-white"
-              />
+              <div className="relative mt-2">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                  className="min-h-12 w-full rounded-lg border border-white/10 bg-white px-4 pr-12 text-sm font-semibold text-black outline-none transition focus:border-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-black/45 transition hover:text-black"
+                >
+                  {showPassword ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
 
               {mode === "register" && (
                 <>
@@ -307,7 +422,7 @@ export default function UserPortal() {
         ) : (
           <div className="grid gap-5 xl:grid-cols-[0.75fr_1.25fr]">
             {/* Left column */}
-            <div className="space-y-5">
+            <div className="min-w-0 space-y-5">
               {/* User info + referral */}
               <div className="rounded-lg border border-white/10 bg-black/40 p-6">
                 <div className="flex items-start justify-between gap-4 mb-5">
@@ -374,7 +489,7 @@ export default function UserPortal() {
             </div>
 
             {/* Right column */}
-            <div className="space-y-5">
+            <div className="min-w-0 space-y-5">
               {/* Tab selector */}
               <div className="flex rounded-lg border border-white/10 bg-black/40 p-1">
                 {(["workouts", "weight"] as const).map((tab) => (
@@ -395,44 +510,71 @@ export default function UserPortal() {
               {rightTab === "workouts" && (
                 <>
                   <form onSubmit={saveWorkout} className="rounded-lg border border-white/10 bg-white/10 p-6 text-white">
-                    <div className="grid gap-4 lg:grid-cols-[0.7fr_1fr_0.45fr]">
-                      <div className="min-w-0">
-                        <label className="text-sm font-black" htmlFor="workout-date">Day</label>
-                        <input
-                          id="workout-date"
-                          type="date"
-                          value={workoutDate}
-                          onChange={(e) => setWorkoutDate(e.target.value)}
-                          className="mt-2 min-h-12 w-full rounded-lg border border-white/20 bg-white/10 px-4 text-sm font-bold text-white outline-none focus:border-white"
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <label className="text-sm font-black" htmlFor="exercise">Exercise</label>
-                        <input
-                          id="exercise"
-                          value={exercise}
-                          onChange={(e) => setExercise(e.target.value)}
-                          placeholder="Chest, cardio, yoga…"
-                          className="mt-2 min-h-12 w-full rounded-lg border border-white/20 bg-white/10 px-4 text-sm font-bold text-white placeholder:text-white/30 outline-none focus:border-white"
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <label className="text-sm font-black" htmlFor="minutes">Minutes</label>
-                        <input
-                          id="minutes"
-                          type="number"
-                          min="1"
-                          max="600"
-                          value={minutes}
-                          onChange={(e) => setMinutes(e.target.value)}
-                          className="mt-2 min-h-12 w-full rounded-lg border border-white/20 bg-white/10 px-4 text-sm font-bold text-white outline-none focus:border-white"
-                        />
-                      </div>
+                    <div className="max-w-xs">
+                      <label className="text-sm font-black" htmlFor="workout-date">Day</label>
+                      <input
+                        id="workout-date"
+                        type="date"
+                        value={workoutDate}
+                        onChange={(e) => setWorkoutDate(e.target.value)}
+                        className="mt-2 min-h-12 w-full rounded-lg border border-white/20 bg-white/10 px-4 text-sm font-bold text-white outline-none focus:border-white"
+                      />
                     </div>
+
+                    <p className="mt-5 text-sm font-black">Exercises</p>
+                    <p className="mt-1 text-xs text-white/40">Add every muscle group you trained today with its own minutes.</p>
+
+                    <div className="mt-3 space-y-3">
+                      {entries.map((row, i) => (
+                        <div key={i} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 sm:gap-3">
+                          <select
+                            aria-label="Exercise category"
+                            value={row.category}
+                            onChange={(e) => updateEntryRow(i, { category: e.target.value as Category })}
+                            className="min-h-12 w-full min-w-0 rounded-lg border border-white/20 bg-white px-3 text-sm font-bold capitalize text-black outline-none focus:border-white"
+                          >
+                            {CATEGORIES.map((c) => (
+                              <option key={c} value={c} className="capitalize">{c}</option>
+                            ))}
+                          </select>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              aria-label="Minutes"
+                              type="number"
+                              min="1"
+                              max="600"
+                              value={row.minutes}
+                              onChange={(e) => updateEntryRow(i, { minutes: e.target.value })}
+                              className="min-h-12 w-20 rounded-lg border border-white/20 bg-white/10 px-3 text-sm font-bold text-white outline-none focus:border-white"
+                            />
+                            <span className="text-xs font-bold text-white/40">min</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeEntryRow(i)}
+                            disabled={entries.length === 1}
+                            aria-label="Remove exercise"
+                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/15 text-lg font-black text-white/50 transition hover:border-red-400/60 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            −
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={addEntryRow}
+                      disabled={entries.length >= CATEGORIES.length}
+                      className="mt-3 inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 text-xs font-black uppercase tracking-[0.15em] text-white/60 transition hover:border-white hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      <span className="text-base leading-none">+</span> Add exercise
+                    </button>
+
                     <button
                       type="submit"
                       disabled={isBusy}
-                      className="mt-5 inline-flex min-h-12 items-center justify-center rounded-lg bg-black px-6 text-sm font-black text-white transition hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-60"
+                      className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-black px-6 text-sm font-black text-white transition hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                     >
                       Log Workout
                     </button>
@@ -500,7 +642,7 @@ export default function UserPortal() {
                           ))}
                         </div>
 
-                        {/* Bars */}
+                        {/* Bars — stacked by muscle group */}
                         <div
                           className="absolute flex items-end gap-1.5"
                           style={{ left: 40, right: 16, top: 16, bottom: 52 }}
@@ -508,6 +650,7 @@ export default function UserPortal() {
                           {chartDays.map((day) => {
                             const isActive = day.minutes > 0;
                             const isHovered = activeDay?.date === day.date;
+                            const segTotal = day.breakdown.reduce((a, s) => a + s.pct, 0) || 1;
                             return (
                               <button
                                 key={day.date}
@@ -529,23 +672,46 @@ export default function UserPortal() {
                                     {day.minutes}m
                                   </span>
                                 )}
-                                {/* Bar */}
-                                <div
-                                  style={{
-                                    width: "100%",
-                                    height: `${Math.max(isActive ? 6 : 3, day.percent)}%`,
-                                    borderRadius: "3px 3px 0 0",
-                                    background: isActive
-                                      ? "linear-gradient(to top, #0369a1, #38bdf8, #818cf8)"
-                                      : "rgba(255,255,255,0.05)",
-                                    boxShadow: isActive && isHovered
-                                      ? "0 0 14px rgba(56,189,248,0.45)"
-                                      : "none",
-                                    border: isActive ? "none" : "1px solid rgba(255,255,255,0.07)",
-                                    transition: "box-shadow 0.15s, opacity 0.15s",
-                                    opacity: !isActive ? 1 : (isHovered ? 1 : 0.85),
-                                  }}
-                                />
+                                {/* Stacked bar */}
+                                {isActive ? (
+                                  <div
+                                    style={{
+                                      width: "100%",
+                                      height: `${Math.max(6, day.percent)}%`,
+                                      borderRadius: "3px 3px 0 0",
+                                      overflow: "hidden",
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      justifyContent: "flex-end",
+                                      boxShadow: isHovered ? "0 0 14px rgba(56,189,248,0.45)" : "none",
+                                      filter: isHovered ? "brightness(1.12)" : "none",
+                                      opacity: isHovered ? 1 : 0.9,
+                                      transition: "box-shadow 0.15s, opacity 0.15s, filter 0.15s",
+                                    }}
+                                  >
+                                    {day.breakdown.slice().reverse().map((seg, si) => (
+                                      <div
+                                        key={seg.category}
+                                        title={`${seg.category}: ${seg.minutes}m`}
+                                        style={{
+                                          height: `${(seg.pct / segTotal) * 100}%`,
+                                          background: CATEGORY_COLOR[seg.category],
+                                          borderTop: si > 0 ? "1px solid rgba(8,8,18,0.55)" : "none",
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div
+                                    style={{
+                                      width: "100%",
+                                      height: "3%",
+                                      borderRadius: "3px 3px 0 0",
+                                      background: "rgba(255,255,255,0.05)",
+                                      border: "1px solid rgba(255,255,255,0.07)",
+                                    }}
+                                  />
+                                )}
                               </button>
                             );
                           })}
@@ -568,45 +734,63 @@ export default function UserPortal() {
                           ))}
                         </div>
 
-                        {/* Hover tooltip */}
+                        {/* Hover tooltip — aligned to the hovered bar, scrolls with it */}
                         {activeDay && (() => {
-                          const idx = chartDays.findIndex(d => d.date === activeDay.date);
-                          const leftPct = chartDays.length > 1 ? (idx / (chartDays.length - 1)) * 100 : 50;
-                          const clampedLeft = Math.min(78, Math.max(10, leftPct));
+                          const idx = chartDays.findIndex((d) => d.date === activeDay.date);
+                          const n = chartDays.length || 1;
+                          const centerPx = 40 + ((idx + 0.5) / n) * (chartMinWidth - 56);
+                          const tipW = 180;
+                          const left = Math.min(chartMinWidth - tipW / 2 - 6, Math.max(tipW / 2 + 6, centerPx));
                           return (
                             <div
                               className="pointer-events-none absolute z-40 -translate-x-1/2 rounded-lg border border-white/10 bg-black/95 p-3 shadow-2xl"
-                              style={{ left: `calc(40px + ${clampedLeft}% * ((100% - 56px) / 100))`, top: 8, minWidth: 140 }}
+                              style={{ left, top: 8, width: tipW }}
                             >
                               <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.2em", color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>
-                                {activeDay.dayShort} — {activeDay.date}
+                                {activeDay.dayShort} — {formatDate(activeDay.date)}
                               </p>
                               <p style={{ fontSize: 18, fontWeight: 900, color: "#fff", marginTop: 4 }}>
-                                {activeDay.minutes > 0 ? `${activeDay.minutes} min` : "Rest day"}
+                                {activeDay.minutes > 0 ? `${activeDay.minutes} min total` : "Rest day"}
                               </p>
-                              {activeDay.exercises.length > 0 && (
-                                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.40)", marginTop: 4, lineHeight: 1.5 }}>
-                                  {activeDay.exercises.join(", ")}
-                                </p>
+                              {activeDay.breakdown.length > 0 && (
+                                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+                                  {activeDay.breakdown.map((seg) => (
+                                    <div key={seg.category} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                                      <span style={{ width: 9, height: 9, borderRadius: 2, background: CATEGORY_COLOR[seg.category], flexShrink: 0 }} />
+                                      <span style={{ flex: 1, fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.85)", textTransform: "capitalize" }}>
+                                        {seg.category}
+                                      </span>
+                                      <span style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>{seg.minutes}m</span>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           );
                         })()}
                       </div>
 
-                      {/* Legend */}
-                      <div className="flex items-center gap-5 px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-                        <div className="flex items-center gap-2">
-                          <div style={{ width: 20, height: 8, borderRadius: 2, background: "linear-gradient(to right, #0369a1, #818cf8)" }} />
-                          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.2em", color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>Trained</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div style={{ width: 20, height: 8, borderRadius: 2, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }} />
-                          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.2em", color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>Rest</span>
-                        </div>
+                      {/* Legend — one chip per muscle group */}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                        {CATEGORIES.map((c) => (
+                          <div key={c} className="flex items-center gap-1.5">
+                            <span style={{ width: 12, height: 8, borderRadius: 2, background: CATEGORY_COLOR[c] }} />
+                            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>{c}</span>
+                          </div>
+                        ))}
                         <span style={{ marginLeft: "auto", fontSize: 9, color: "rgba(255,255,255,0.25)" }}>{rangeLabel}</span>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Per-exercise breakdown — one graph, each day's exercises side by side */}
+                  <div className="rounded-lg border border-white/10 bg-black/40 p-6">
+                    <div className="mb-1 flex items-end justify-between gap-2">
+                      <h3 className="text-xl font-black text-white">By muscle group</h3>
+                      <p className="text-xs text-white/40">{rangeLabel}</p>
+                    </div>
+                    <p className="mb-5 text-sm text-white/40">Total minutes per muscle group over the selected range.</p>
+                    <MuscleGroupCharts days={chartDays} />
                   </div>
 
                   <div className="rounded-lg border border-white/10 bg-black/40 p-6">
@@ -615,15 +799,15 @@ export default function UserPortal() {
                       {logs.slice(0, 6).map((log) => (
                         <div key={`${log.date}-${log.exercise}-${log.createdAt}`} className="flex items-center justify-between gap-4 rounded-lg bg-white/[0.04] p-4">
                           <div>
-                            <p className="font-bold text-white">{log.exercise}</p>
-                            <p className="mt-1 text-sm text-white/40">{log.date}</p>
+                            <p className="font-bold capitalize text-white">{log.exercise}</p>
+                            <p className="mt-1 text-sm text-white/40">{formatDate(log.date)}</p>
                           </div>
                           <p className="text-lg font-black text-white/70">{log.minutes}m</p>
                         </div>
                       ))}
                       {logs.length === 0 && (
                         <p className="rounded-lg bg-white/[0.04] p-4 text-sm text-white/40">
-                          No workouts yet. Log today's training to start the graph.
+                          No workouts yet. Log today&apos;s training to start the graph.
                         </p>
                       )}
                     </div>
@@ -673,6 +857,35 @@ export default function UserPortal() {
                         </select>
                       </div>
                     </div>
+
+                    <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_200px]">
+                      <div>
+                        <label className="text-sm font-black" htmlFor="weight-notes">Notes</label>
+                        <textarea
+                          id="weight-notes"
+                          value={weightNotes}
+                          onChange={(e) => setWeightNotes(e.target.value)}
+                          rows={2}
+                          maxLength={500}
+                          placeholder="What you ate, how you felt, sleep, water…"
+                          className="mt-2 w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-sm font-semibold leading-6 text-white placeholder:text-white/30 outline-none focus:border-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-black" htmlFor="weight-constipation">Constipation</label>
+                        <select
+                          id="weight-constipation"
+                          value={weightConstipation}
+                          onChange={(e) => setWeightConstipation(e.target.value as Constipation)}
+                          className="mt-2 min-h-12 w-full rounded-lg border border-black/10 bg-white px-4 text-sm font-bold capitalize text-black outline-none focus:border-white"
+                        >
+                          {CONSTIPATION_LEVELS.map((lvl) => (
+                            <option key={lvl} value={lvl}>{CONSTIPATION_LABEL[lvl]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
                     <button
                       type="submit"
                       disabled={isBusy || !weightValue}
@@ -693,14 +906,34 @@ export default function UserPortal() {
                   <div className="rounded-lg border border-white/10 bg-black/40 p-6">
                     <h3 className="text-xl font-black text-white">Weight History</h3>
                     <div className="mt-5 space-y-3">
-                      {weightLogs.slice(0, 10).map((log) => (
-                        <div key={log.date} className="flex items-center justify-between gap-4 rounded-lg bg-white/[0.04] p-4">
-                          <p className="text-sm text-white/50">{log.date}</p>
-                          <p className="text-lg font-black text-white">
-                            {log.weight} <span className="text-sm font-normal text-white/40">{log.unit}</span>
-                          </p>
-                        </div>
-                      ))}
+                      {weightLogs.slice(0, 10).map((log) => {
+                        const lvl = (CONSTIPATION_LEVELS as readonly string[]).includes(log.constipation || "")
+                          ? (log.constipation as Constipation)
+                          : "none";
+                        return (
+                          <div key={log.date} className="flex items-start justify-between gap-4 rounded-lg bg-white/[0.04] p-4">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm text-white/50">{formatDate(log.date)}</p>
+                                {lvl !== "none" && (
+                                  <span
+                                    className="rounded px-2 py-0.5 text-[0.62rem] font-bold uppercase tracking-wide"
+                                    style={{ background: `${CONSTIPATION_COLOR[lvl]}22`, color: CONSTIPATION_COLOR[lvl] }}
+                                  >
+                                    Constipation: {lvl}
+                                  </span>
+                                )}
+                              </div>
+                              {log.notes && (
+                                <p className="mt-1.5 text-sm leading-5 text-white/45">{log.notes}</p>
+                              )}
+                            </div>
+                            <p className="shrink-0 text-lg font-black text-white">
+                              {log.weight} <span className="text-sm font-normal text-white/40">{log.unit}</span>
+                            </p>
+                          </div>
+                        );
+                      })}
                       {weightLogs.length === 0 && (
                         <p className="rounded-lg bg-white/[0.04] p-4 text-sm text-white/40">
                           No weight entries yet. Log your first entry above.
@@ -719,8 +952,20 @@ export default function UserPortal() {
 }
 
 /* ── Weight Chart ─────────────────────────────────────────────────────── */
+function normalizeConstipation(value?: string): Constipation {
+  return (CONSTIPATION_LEVELS as readonly string[]).includes(value || "")
+    ? (value as Constipation)
+    : "none";
+}
+
 function WeightChart({ logs }: { logs: WeightLog[] }) {
-  const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date)).slice(-30);
+  const [active, setActive] = useState<number | null>(null);
+
+  const sorted = useMemo(
+    () => [...logs].sort((a, b) => a.date.localeCompare(b.date)).slice(-30),
+    [logs],
+  );
+
   if (sorted.length < 2) return null;
 
   const weights = sorted.map((l) => l.weight);
@@ -729,11 +974,13 @@ function WeightChart({ logs }: { logs: WeightLog[] }) {
   const range = maxW - minW || 1;
 
   const points = sorted.map((l, i) => ({
-    x: (i / (sorted.length - 1)) * 100,
+    x: sorted.length === 1 ? 50 : (i / (sorted.length - 1)) * 100,
     y: 100 - ((l.weight - minW) / range) * 90,
     weight: l.weight,
     unit: l.unit,
     date: l.date,
+    notes: l.notes || "",
+    level: normalizeConstipation(l.constipation),
   }));
 
   const path = points.reduce((acc, p, i) => {
@@ -743,68 +990,215 @@ function WeightChart({ logs }: { logs: WeightLog[] }) {
     return `${acc} C ${cx} ${prev.y}, ${cx} ${p.y}, ${p.x} ${p.y}`;
   }, "");
 
+  const act = active !== null ? points[active] : null;
+
   return (
-    <div style={{ height: 140, position: "relative" }}>
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%", overflow: "visible" }}>
-        <path d={path} fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" />
-        {points.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="2" fill="#facc15" />
-        ))}
-      </svg>
+    <div>
+      <div style={{ height: 170, position: "relative" }} onMouseLeave={() => setActive(null)}>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%", overflow: "visible" }}>
+          <path d={path} fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+
+        {/* Dots + hover targets (HTML overlay so tooltips aren't distorted by the stretched SVG) */}
+        {points.map((p, i) => {
+          const color = p.level === "none" ? "#facc15" : CONSTIPATION_COLOR[p.level];
+          const isActive = active === i;
+          return (
+            <button
+              key={i}
+              type="button"
+              onMouseEnter={() => setActive(i)}
+              onFocus={() => setActive(i)}
+              onBlur={() => setActive(null)}
+              aria-label={`${p.date}: ${p.weight} ${p.unit}, ${CONSTIPATION_LABEL[p.level]}`}
+              style={{
+                position: "absolute",
+                left: `${p.x}%`,
+                top: `${p.y}%`,
+                transform: "translate(-50%, -50%)",
+                width: 22,
+                height: 22,
+                padding: 0,
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
+              <span
+                style={{
+                  width: isActive ? 12 : 7,
+                  height: isActive ? 12 : 7,
+                  borderRadius: "50%",
+                  background: color,
+                  border: "2px solid rgba(8,8,18,0.9)",
+                  boxShadow: isActive ? `0 0 10px ${color}` : "none",
+                  transition: "width 0.12s, height 0.12s",
+                }}
+              />
+            </button>
+          );
+        })}
+
+        {/* Hover tooltip */}
+        {act && (() => {
+          const clampLeft = Math.min(82, Math.max(18, act.x));
+          return (
+            <div
+              className="pointer-events-none absolute z-30 -translate-x-1/2 rounded-lg border border-white/10 bg-black/95 p-3 shadow-2xl"
+              style={{ left: `${clampLeft}%`, top: 0, width: 190 }}
+            >
+              <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.18em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase" }}>
+                {formatDate(act.date)}
+              </p>
+              <p style={{ fontSize: 20, fontWeight: 900, color: "#fff", marginTop: 2 }}>
+                {act.weight} <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.45)" }}>{act.unit}</span>
+              </p>
+              <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: act.level === "none" ? "#34d399" : CONSTIPATION_COLOR[act.level], flexShrink: 0 }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>
+                  {act.level === "none" ? "No constipation" : `Constipation: ${act.level}`}
+                </span>
+              </div>
+              {act.notes && (
+                <p style={{ fontSize: 11, lineHeight: 1.5, color: "rgba(255,255,255,0.5)", marginTop: 6 }}>{act.notes}</p>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.5rem" }}>
-        <span style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.30)" }}>{sorted[0].date}</span>
-        <span style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.30)" }}>{sorted[sorted.length - 1].date}</span>
+        <span style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.30)" }}>{formatDate(sorted[0].date)}</span>
+        <span style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.30)" }}>{formatDate(sorted[sorted.length - 1].date)}</span>
       </div>
     </div>
   );
 }
 
 /* ── Chart types + helpers ────────────────────────────────────────────── */
+type ChartSeg = { category: Category; minutes: number; pct: number };
 type ChartDay = {
-  date: string; minutes: number; label: string;
-  exercises: string[]; percent: number; x: number; y: number;
-  dayShort: string; dateNum: string;
+  date: string; minutes: number; percent: number;
+  breakdown: ChartSeg[]; dayShort: string; dateNum: string;
 };
 
 function buildChartDays(logs: WorkoutLog[], rangeStart: string, rangeEnd: string): ChartDay[] {
-  const minutesByDate = new Map<string, number>();
-  const exercisesByDate = new Map<string, string[]>();
+  // date -> (category -> minutes)
+  const byDate = new Map<string, Map<Category, number>>();
 
   logs.forEach((log) => {
-    minutesByDate.set(log.date, (minutesByDate.get(log.date) || 0) + log.minutes);
-    exercisesByDate.set(log.date, [...(exercisesByDate.get(log.date) || []), log.exercise]);
+    const cat = categorize(log.exercise);
+    const dayMap = byDate.get(log.date) ?? new Map<Category, number>();
+    dayMap.set(cat, (dayMap.get(cat) || 0) + log.minutes);
+    byDate.set(log.date, dayMap);
   });
 
   const dates = logs.map((l) => l.date).sort();
   const startKey = rangeStart || dates[0] || today;
   const endKey = rangeEnd || dates[dates.length - 1] || today;
   const [safeStart, safeEnd] = startKey <= endKey ? [startKey, endKey] : [endKey, startKey];
-  const days: Omit<ChartDay, "percent" | "x" | "y">[] = [];
+
+  const days: { date: string; total: number; catMap?: Map<Category, number>; dayShort: string; dateNum: string }[] = [];
   const cursor = new Date(`${safeStart}T12:00:00`);
   const endDate = new Date(`${safeEnd}T12:00:00`);
 
   while (cursor <= endDate) {
     const key = cursor.toISOString().slice(0, 10);
     const d = new Date(`${key}T12:00:00`);
-    const dayShort = d.toLocaleDateString("en-US", { weekday: "short" });
-    const dateNum = d.toLocaleDateString("en-US", { day: "numeric", month: "short" });
-    days.push({ date: key, minutes: minutesByDate.get(key) || 0, label: formatChartLabel(key), exercises: exercisesByDate.get(key) || [], dayShort, dateNum });
+    const catMap = byDate.get(key);
+    const total = catMap ? [...catMap.values()].reduce((a, b) => a + b, 0) : 0;
+    days.push({
+      date: key,
+      total,
+      catMap,
+      dayShort: d.toLocaleDateString("en-US", { weekday: "short" }),
+      dateNum: d.toLocaleDateString("en-US", { day: "numeric", month: "short" }),
+    });
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  const maxMinutes = Math.max(60, ...days.map((d) => d.minutes));
-  return days.map((day, i) => {
-    const percent = Math.min(100, Math.round((day.minutes / maxMinutes) * 100));
-    return { ...day, percent, x: days.length === 1 ? 50 : (i / (days.length - 1)) * 100, y: 100 - percent };
-  });
+  const maxMinutes = Math.max(60, ...days.map((d) => d.total));
+  // Newest first: latest day on the left, scroll right for older logs.
+  return days
+    .map((day) => {
+      const percent = Math.min(100, Math.round((day.total / maxMinutes) * 100));
+      const breakdown: ChartSeg[] = CATEGORIES.filter((c) => day.catMap?.get(c)).map((c) => {
+        const minutes = day.catMap!.get(c)!;
+        return { category: c, minutes, pct: (minutes / maxMinutes) * 100 };
+      });
+      return { date: day.date, minutes: day.total, percent, breakdown, dayShort: day.dayShort, dateNum: day.dateNum };
+    })
+    .reverse();
 }
 
 function buildRangeLabel(days: ChartDay[], rangeStart: string, rangeEnd: string) {
   if (days.length === 0) return "All time";
   const prefix = rangeStart || rangeEnd ? "Filtered" : "All time";
-  return `${prefix}: ${days[0].date} to ${days[days.length - 1].date}`;
+  const dates = days.map((d) => d.date);
+  const lo = dates.reduce((a, b) => (a < b ? a : b));
+  const hi = dates.reduce((a, b) => (a > b ? a : b));
+  return `${prefix}: ${formatDate(lo)} to ${formatDate(hi)}`;
 }
 
-function formatChartLabel(date: string) {
-  return new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+/* Render an ISO yyyy-mm-dd date as dd/mm/yyyy. */
+function formatDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}
+
+/* ── Muscle-group totals chart ────────────────────────────────────────── */
+/* One bar per muscle group; height = summed minutes for that group over the
+   selected range. */
+function MuscleGroupCharts({ days }: { days: ChartDay[] }) {
+  const totals = new Map<Category, number>();
+  days.forEach((d) =>
+    d.breakdown.forEach((s) => totals.set(s.category, (totals.get(s.category) || 0) + s.minutes)),
+  );
+
+  const data = CATEGORIES.filter((c) => (totals.get(c) || 0) > 0).map((c) => ({
+    category: c,
+    minutes: totals.get(c)!,
+  }));
+
+  if (data.length === 0) {
+    return <p className="text-sm text-white/40">No exercises logged in this range yet.</p>;
+  }
+
+  const max = Math.max(...data.map((d) => d.minutes));
+
+  return (
+    <div className="rounded-lg border border-white/[0.07] p-5" style={{ background: "rgba(8,8,18,0.80)" }}>
+      <div className="flex items-end justify-around gap-3" style={{ height: 260 }}>
+        {data.map((d) => (
+          <div key={d.category} className="flex h-full flex-1 flex-col items-center" style={{ maxWidth: 96 }}>
+            {/* bar + value sit at the bottom of a growing area */}
+            <div className="flex w-full flex-col items-center justify-end" style={{ flex: 1 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", marginBottom: 6, whiteSpace: "nowrap" }}>
+                {d.minutes} min
+              </span>
+              <div
+                title={`${d.category}: ${d.minutes} min total`}
+                style={{
+                  width: "72%",
+                  maxWidth: 60,
+                  height: `${Math.max(4, (d.minutes / max) * 85)}%`,
+                  background: `linear-gradient(to top, ${CATEGORY_COLOR[d.category]}, ${CATEGORY_COLOR[d.category]}bb)`,
+                  borderRadius: "4px 4px 0 0",
+                  boxShadow: `0 0 18px ${CATEGORY_COLOR[d.category]}33`,
+                }}
+              />
+            </div>
+            <span
+              className="capitalize"
+              style={{ marginTop: 10, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", color: "rgba(255,255,255,0.65)" }}
+            >
+              {d.category}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

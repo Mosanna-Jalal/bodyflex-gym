@@ -137,6 +137,7 @@ export default function BgGymAnimation() {
       style={{ position: "fixed", inset: 0, zIndex: 0, background: "#050505" }}
     >
       <model-viewer
+        id="bg-gym-model"
         src="/bg-gym-animation/ruang_gym.glb"
         alt="3D gym interior"
         autoplay

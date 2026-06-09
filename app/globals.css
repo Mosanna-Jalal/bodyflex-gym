@@ -52,6 +52,9 @@ model-viewer {
 .animate-fade-in-up  { animation: fadeInUp 0.7s ease forwards; }
 .animate-fade-in     { animation: fadeIn   0.6s ease forwards; }
 
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin-ring { animation: spin 0.9s linear infinite; }
+
 .delay-100 { animation-delay: 0.1s; }
 .delay-200 { animation-delay: 0.2s; }
 .delay-300 { animation-delay: 0.3s; }

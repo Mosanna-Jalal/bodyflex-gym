@@ -22,6 +22,8 @@ export type WeightLog = {
   date: string;
   weight: number;
   unit: string;
+  notes?: string;
+  constipation?: string; // "none" | "mild" | "moderate" | "severe"
   createdAt: Date;
 };
 

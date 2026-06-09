@@ -30,10 +30,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Login required." }, { status: 401 });
     }
 
-    const { date, weight, unit } = await request.json();
+    const { date, weight, unit, notes, constipation } = await request.json();
     const cleanDate = String(date || "").trim();
     const cleanWeight = Number(weight);
     const cleanUnit = ["kg", "lbs"].includes(String(unit)) ? String(unit) : "kg";
+    const cleanNotes = String(notes || "").trim().slice(0, 500);
+    const cleanConstipation = ["none", "mild", "moderate", "severe"].includes(String(constipation))
+      ? String(constipation)
+      : "none";
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
       return NextResponse.json({ error: "Invalid date." }, { status: 400 });
@@ -47,7 +51,15 @@ export async function POST(request: Request) {
 
     await col.replaceOne(
       { userId, date: cleanDate },
-      { userId, date: cleanDate, weight: cleanWeight, unit: cleanUnit, createdAt: new Date() },
+      {
+        userId,
+        date: cleanDate,
+        weight: cleanWeight,
+        unit: cleanUnit,
+        notes: cleanNotes,
+        constipation: cleanConstipation,
+        createdAt: new Date(),
+      },
       { upsert: true },
     );
 
