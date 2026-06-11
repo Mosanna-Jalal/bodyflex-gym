@@ -27,6 +27,16 @@ type WeightLog = {
 
 const today = new Date().toISOString().slice(0, 10);
 
+async function readJsonResponse(response: Response) {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (!contentType.includes("application/json")) {
+    throw new Error("The app API is unavailable. Refresh the page or restart the local server.");
+  }
+
+  return response.json();
+}
+
 /* The 8 trackable muscle groups / exercise types. */
 const CATEGORIES = [
   "chest",
@@ -127,7 +137,7 @@ export default function UserPortal() {
     async function loadUser() {
       try {
         const res = await fetch("/api/auth/me");
-        const data = await res.json();
+        const data = await readJsonResponse(res);
         if (data.user) {
           setUser(data.user);
           setGoalsText(data.user.goals.join("\n"));
@@ -169,7 +179,7 @@ export default function UserPortal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || "Could not continue.");
 
       setUser(data.user);
