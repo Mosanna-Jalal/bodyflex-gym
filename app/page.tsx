@@ -61,7 +61,7 @@ export default async function Home() {
 
         {/* ── NOTICE BANNER ────────────────────────────────────────────── */}
         {activeNotices.length > 0 && (
-          <div style={{ background: "rgba(255,255,255,0.06)", borderBottom: B }}>
+          <div style={{ background: "#b91c1c", borderBottom: "1px solid rgba(0,0,0,0.25)" }}>
             <div className="mx-auto max-w-7xl px-5 sm:px-6">
               {activeNotices.map((notice) => (
                 <div
@@ -69,27 +69,30 @@ export default async function Home() {
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "1rem",
-                    padding: "0.7rem 0",
-                    borderBottom: activeNotices.indexOf(notice) < activeNotices.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                    gap: "0.85rem",
+                    flexWrap: "wrap",
+                    padding: "0.6rem 0",
+                    borderBottom: activeNotices.indexOf(notice) < activeNotices.length - 1 ? "1px solid rgba(255,255,255,0.20)" : "none",
                   }}
                 >
                   <span
                     style={{
                       flexShrink: 0,
                       fontSize: "0.55rem",
-                      letterSpacing: "0.24em",
+                      fontWeight: 800,
+                      letterSpacing: "0.22em",
                       textTransform: "uppercase",
-                      color: "rgba(255,255,255,0.35)",
-                      background: "rgba(255,255,255,0.08)",
-                      padding: "0.2rem 0.55rem",
+                      color: "#b91c1c",
+                      background: "#fff",
+                      padding: "0.22rem 0.6rem",
+                      borderRadius: 2,
                       whiteSpace: "nowrap",
                     }}
                   >
                     Notice
                   </span>
-                  <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.65)", letterSpacing: "0.02em" }}>
-                    <strong style={{ color: "#fff", fontWeight: 700, marginRight: "0.5rem" }}>{notice.title}</strong>
+                  <p style={{ fontSize: "0.84rem", color: "rgba(255,255,255,0.95)", letterSpacing: "0.01em" }}>
+                    <strong style={{ color: "#fff", fontWeight: 800, marginRight: "0.5rem" }}>{notice.title}</strong>
                     {notice.message}
                   </p>
                 </div>

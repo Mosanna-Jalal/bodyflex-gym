@@ -427,9 +427,9 @@ function MusicAdmin({ notify }: { notify: (m: string) => void }) {
         return (
           <div key={pl.id} style={{ marginBottom: "0.75rem", border: "1px solid rgba(255,255,255,0.07)" }}>
             {/* Playlist row */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.8rem 1rem", background: "rgba(255,255,255,0.03)" }}>
+            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem 0.75rem", padding: "0.8rem 1rem", background: "rgba(255,255,255,0.03)" }}>
               <span style={{ width: 10, height: 10, borderRadius: "50%", background: pl.color, flexShrink: 0 }} />
-              <span style={{ flex: 1, fontWeight: 600, fontSize: "0.88rem" }}>{pl.name}</span>
+              <span style={{ flex: 1, minWidth: 120, fontWeight: 600, fontSize: "0.88rem" }}>{pl.name}</span>
               <span style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.32)" }}>{plTracks.length} track{plTracks.length !== 1 ? "s" : ""}</span>
               <button onClick={() => copyShare(pl)} style={{ ...S.btnGhost, padding: "0.28rem 0.7rem", fontSize: "0.68rem", color: copied === pl.id ? "#4ade80" : undefined }}>
                 {copied === pl.id ? "Copied!" : "Share Link"}
@@ -468,8 +468,21 @@ function MusicAdmin({ notify }: { notify: (m: string) => void }) {
   );
 }
 
+/* ── Responsive hook ─────────────────────────────────────────────────── */
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isMobile;
+}
+
 /* ── Main component ──────────────────────────────────────────────────── */
 export default function AdminDashboard() {
+  const isMobile = useIsMobile();
   const [tabIdx, setTabIdx] = useState(0);
   const [items, setItems] = useState<AnyItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -577,7 +590,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Header */}
-      <header style={{ background: "#0d0d0d", borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "0 1.5rem", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, position: "sticky", top: 0, zIndex: 50 }}>
+      <header style={{ background: "#0d0d0d", borderBottom: "1px solid rgba(255,255,255,0.07)", padding: isMobile ? "0 1rem" : "0 1.5rem", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
           <span style={{ background: "#fff", color: "#000", width: 32, height: 32, display: "grid", placeItems: "center", fontWeight: 800, fontSize: "0.75rem", letterSpacing: "0.06em", flexShrink: 0 }}>AR</span>
           <span style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "rgba(255,255,255,0.85)" }}>Admin Panel</span>
@@ -590,11 +603,40 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", flex: 1, overflow: isMobile ? "visible" : "hidden" }}>
 
-        {/* Sidebar */}
-        <aside style={{ width: 200, background: "#0b0b0b", borderRight: "1px solid rgba(255,255,255,0.06)", padding: "1.25rem 0", flexShrink: 0, overflowY: "auto" }}>
-          {SIDEBAR_GROUPS.map((group) => (
+        {/* Sidebar — vertical on desktop, horizontal scroll bar on mobile */}
+        <aside
+          style={
+            isMobile
+              ? { display: "flex", gap: "0.4rem", overflowX: "auto", background: "#0b0b0b", borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "0.6rem 0.75rem", flexShrink: 0, position: "sticky", top: 56, zIndex: 40, WebkitOverflowScrolling: "touch" }
+              : { width: 200, background: "#0b0b0b", borderRight: "1px solid rgba(255,255,255,0.06)", padding: "1.25rem 0", flexShrink: 0, overflowY: "auto" }
+          }
+        >
+          {isMobile ? (
+            SCHEMAS.map((s, i) => (
+              <button
+                key={s.collection}
+                onClick={() => switchTab(i)}
+                style={{
+                  flexShrink: 0,
+                  whiteSpace: "nowrap",
+                  padding: "0.5rem 0.85rem",
+                  borderRadius: 6,
+                  background: tabIdx === i ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${tabIdx === i ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.08)"}`,
+                  color: tabIdx === i ? "#fff" : "rgba(255,255,255,0.5)",
+                  fontSize: "0.72rem",
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  cursor: "pointer",
+                }}
+              >
+                {s.label}
+              </button>
+            ))
+          ) : (
+            SIDEBAR_GROUPS.map((group) => (
             <div key={group.label} style={{ marginBottom: "1.25rem" }}>
               <p style={{ fontSize: "0.58rem", letterSpacing: "0.28em", color: "rgba(255,255,255,0.22)", textTransform: "uppercase", padding: "0 1.25rem", marginBottom: "0.4rem" }}>
                 {group.label}
@@ -626,16 +668,17 @@ export default function AdminDashboard() {
                 );
               })}
             </div>
-          ))}
+            ))
+          )}
         </aside>
 
         {/* Main content */}
-        <main style={{ flex: 1, overflow: "auto", padding: "2rem 2.5rem" }}>
+        <main style={{ flex: 1, overflow: isMobile ? "visible" : "auto", padding: isMobile ? "1.25rem 1rem" : "2rem 2.5rem", minWidth: 0 }}>
           {/* Section header */}
-          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: "1.75rem" }}>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: "1.75rem" }}>
             <div>
               <p style={{ fontSize: "0.6rem", letterSpacing: "0.24em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", marginBottom: "0.3rem" }}>Managing</p>
-              <h1 style={{ fontSize: "1.6rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>{schema.label}</h1>
+              <h1 style={{ fontSize: isMobile ? "1.3rem" : "1.6rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>{schema.label}</h1>
             </div>
             {!isSingleton && !schema.readOnly && schema.sectionType !== "music" && (
               <button onClick={openAdd} style={S.btnPrimary}>+ Add New</button>
@@ -698,7 +741,7 @@ export default function AdminDashboard() {
                     )}
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", gap: "0.4rem", flexShrink: 0 }}>
                     {!schema.readOnly && (
                       <button
                         onClick={() => openEdit(item)}
