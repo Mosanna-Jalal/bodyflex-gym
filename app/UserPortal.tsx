@@ -10,6 +10,7 @@ type User = {
 };
 
 type WorkoutLog = {
+  id: string;
   userId: string;
   date: string;
   exercise: string;
@@ -111,6 +112,10 @@ export default function UserPortal() {
   const [workoutDate, setWorkoutDate] = useState(today);
   const [entries, setEntries] = useState<EntryRow[]>([{ category: "chest", minutes: "45" }]);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [editLog, setEditLog] = useState<{ date: string; category: Category; minutes: string }>({ date: today, category: "chest", minutes: "45" });
+  const [confirmDeleteLog, setConfirmDeleteLog] = useState<string | null>(null);
+  const [confirmDeleteWeight, setConfirmDeleteWeight] = useState<string | null>(null);
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
   const [weightDate, setWeightDate] = useState(today);
   const [weightValue, setWeightValue] = useState("");
@@ -257,6 +262,85 @@ export default function UserPortal() {
       setMessage(`Logged ${payload.length} exercise${payload.length > 1 ? "s" : ""}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save workout.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  function startEditLog(log: WorkoutLog) {
+    setConfirmDeleteLog(null);
+    setEditingLogId(log.id);
+    setEditLog({ date: log.date, category: categorize(log.exercise), minutes: String(log.minutes) });
+  }
+
+  async function saveEditLog(id: string) {
+    const minutes = Number(editLog.minutes);
+    if (!editLog.date || !Number.isFinite(minutes) || minutes <= 0) {
+      setMessage("Enter valid minutes for the workout.");
+      return;
+    }
+    setIsBusy(true);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/workouts/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: editLog.date, exercise: editLog.category, minutes }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not update workout.");
+      setLogs(data.logs || []);
+      setEditingLogId(null);
+      setMessage("Workout updated.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not update workout.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function deleteWorkout(id: string) {
+    if (confirmDeleteLog !== id) { setConfirmDeleteLog(id); return; }
+    setIsBusy(true);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/workouts/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not delete workout.");
+      setLogs(data.logs || []);
+      setConfirmDeleteLog(null);
+      if (editingLogId === id) setEditingLogId(null);
+      setMessage("Workout deleted.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not delete workout.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  function editWeight(log: WeightLog) {
+    setConfirmDeleteWeight(null);
+    setWeightDate(log.date);
+    setWeightValue(String(log.weight));
+    setWeightUnit(log.unit === "lbs" ? "lbs" : "kg");
+    setWeightNotes(log.notes || "");
+    setWeightConstipation((CONSTIPATION_LEVELS as readonly string[]).includes(log.constipation || "") ? (log.constipation as Constipation) : "none");
+    setMessage(`Editing ${formatDate(log.date)} — change values and tap Log Weight to update.`);
+  }
+
+  async function deleteWeight(date: string) {
+    if (confirmDeleteWeight !== date) { setConfirmDeleteWeight(date); return; }
+    setIsBusy(true);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/weight/${date}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not delete weight log.");
+      setWeightLogs(data.logs || []);
+      setConfirmDeleteWeight(null);
+      setMessage("Weight log deleted.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not delete weight log.");
     } finally {
       setIsBusy(false);
     }
@@ -806,15 +890,105 @@ export default function UserPortal() {
                   <div className="rounded-lg border border-white/10 bg-black/40 p-6">
                     <h3 className="text-xl font-black text-white">Recent workouts</h3>
                     <div className="mt-5 space-y-3">
-                      {logs.slice(0, 6).map((log) => (
-                        <div key={`${log.date}-${log.exercise}-${log.createdAt}`} className="flex items-center justify-between gap-4 rounded-lg bg-white/[0.04] p-4">
-                          <div>
-                            <p className="font-bold capitalize text-white">{log.exercise}</p>
-                            <p className="mt-1 text-sm text-white/40">{formatDate(log.date)}</p>
+                      {logs.slice(0, 10).map((log) =>
+                        editingLogId === log.id ? (
+                          <div key={log.id} className="rounded-lg border border-white/15 bg-white/[0.07] p-4">
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              <input
+                                type="date"
+                                aria-label="Workout date"
+                                value={editLog.date}
+                                onChange={(e) => setEditLog((p) => ({ ...p, date: e.target.value }))}
+                                className="min-h-11 w-full rounded-lg border border-white/20 bg-white/10 px-3 text-sm font-bold text-white outline-none focus:border-white"
+                              />
+                              <select
+                                aria-label="Exercise category"
+                                value={editLog.category}
+                                onChange={(e) => setEditLog((p) => ({ ...p, category: e.target.value as Category }))}
+                                className="min-h-11 w-full rounded-lg border border-white/20 bg-white px-3 text-sm font-bold capitalize text-black outline-none focus:border-white"
+                              >
+                                {CATEGORIES.map((c) => (
+                                  <option key={c} value={c} className="capitalize">{c}</option>
+                                ))}
+                              </select>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="600"
+                                  aria-label="Minutes"
+                                  value={editLog.minutes}
+                                  onChange={(e) => setEditLog((p) => ({ ...p, minutes: e.target.value }))}
+                                  className="min-h-11 w-20 rounded-lg border border-white/20 bg-white/10 px-3 text-sm font-bold text-white outline-none focus:border-white"
+                                />
+                                <span className="text-xs font-bold text-white/40">min</span>
+                              </div>
+                            </div>
+                            <div className="mt-3 flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => saveEditLog(log.id)}
+                                disabled={isBusy}
+                                className="rounded-lg bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-black transition hover:bg-white/80 disabled:opacity-60"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingLogId(null)}
+                                className="rounded-lg border border-white/20 px-4 py-2 text-xs font-black uppercase tracking-wide text-white/60 transition hover:text-white"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
-                          <p className="text-lg font-black text-white/70">{log.minutes}m</p>
-                        </div>
-                      ))}
+                        ) : (
+                          <div key={log.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white/[0.04] p-4">
+                            <div className="min-w-0">
+                              <p className="font-bold capitalize text-white">{log.exercise}</p>
+                              <p className="mt-1 text-sm text-white/40">{formatDate(log.date)}</p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <p className="text-lg font-black text-white/70">{log.minutes}m</p>
+                              <button
+                                type="button"
+                                onClick={() => startEditLog(log)}
+                                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-bold text-white/60 transition hover:border-white/60 hover:text-white"
+                              >
+                                Edit
+                              </button>
+                              {confirmDeleteLog === log.id ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteWorkout(log.id)}
+                                    disabled={isBusy}
+                                    className="rounded-lg px-3 py-1.5 text-xs font-bold text-red-300 transition disabled:opacity-60"
+                                    style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.5)" }}
+                                  >
+                                    Confirm
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteLog(null)}
+                                    className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs font-bold text-white/40 transition hover:text-white"
+                                  >
+                                    ✕
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => deleteWorkout(log.id)}
+                                  className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-white/40 transition hover:border-red-400/60 hover:text-red-300"
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ),
+                      )}
                       {logs.length === 0 && (
                         <p className="rounded-lg bg-white/[0.04] p-4 text-sm text-white/40">
                           No workouts yet. Log today&apos;s training to start the graph.
@@ -938,9 +1112,48 @@ export default function UserPortal() {
                                 <p className="mt-1.5 text-sm leading-5 text-white/45">{log.notes}</p>
                               )}
                             </div>
-                            <p className="shrink-0 text-lg font-black text-white">
-                              {log.weight} <span className="text-sm font-normal text-white/40">{log.unit}</span>
-                            </p>
+                            <div className="flex shrink-0 flex-col items-end gap-2">
+                              <p className="text-lg font-black text-white">
+                                {log.weight} <span className="text-sm font-normal text-white/40">{log.unit}</span>
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => editWeight(log)}
+                                  className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-bold text-white/60 transition hover:border-white/60 hover:text-white"
+                                >
+                                  Edit
+                                </button>
+                                {confirmDeleteWeight === log.date ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => deleteWeight(log.date)}
+                                      disabled={isBusy}
+                                      className="rounded-lg px-3 py-1.5 text-xs font-bold text-red-300 transition disabled:opacity-60"
+                                      style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.5)" }}
+                                    >
+                                      Confirm
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmDeleteWeight(null)}
+                                      className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs font-bold text-white/40 transition hover:text-white"
+                                    >
+                                      ✕
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteWeight(log.date)}
+                                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-white/40 transition hover:border-red-400/60 hover:text-red-300"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         );
                       })}

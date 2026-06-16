@@ -63,6 +63,13 @@ export async function workoutsCollection(): Promise<Collection<WorkoutLog>> {
   return collection;
 }
 
+/** Returns a user's workout logs with a string `id` (so the client can edit/delete each one). */
+export async function listUserWorkouts(userId: string) {
+  const workouts = await workoutsCollection();
+  const docs = await workouts.find({ userId }).sort({ date: -1, createdAt: -1 }).toArray();
+  return docs.map(({ _id, ...rest }) => ({ id: _id.toString(), ...rest }));
+}
+
 export async function weightCollection(): Promise<Collection<WeightLog>> {
   const db = await getDb();
   const collection = db.collection<WeightLog>("weight_logs");

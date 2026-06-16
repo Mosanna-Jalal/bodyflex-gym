@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { workoutsCollection } from "@/app/lib/db";
+import { workoutsCollection, listUserWorkouts } from "@/app/lib/db";
 import { getSessionUserId } from "@/app/lib/session";
 
 export async function GET() {
@@ -10,11 +10,7 @@ export async function GET() {
       return NextResponse.json({ error: "You must be logged in." }, { status: 401 });
     }
 
-    const workouts = await workoutsCollection();
-    const logs = await workouts
-      .find({ userId }, { projection: { _id: 0 } })
-      .sort({ date: -1, createdAt: -1 })
-      .toArray();
+    const logs = await listUserWorkouts(userId);
 
     return NextResponse.json({ logs });
   } catch (error) {
@@ -76,10 +72,7 @@ export async function POST(request: Request) {
     const workouts = await workoutsCollection();
     await workouts.insertMany(docs);
 
-    const logs = await workouts
-      .find({ userId }, { projection: { _id: 0 } })
-      .sort({ date: -1, createdAt: -1 })
-      .toArray();
+    const logs = await listUserWorkouts(userId);
 
     return NextResponse.json({ logs });
   } catch (error) {
