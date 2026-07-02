@@ -713,12 +713,21 @@ export default function UserPortal() {
                       </button>
                     </div>
 
+                    {/* Mobile swipe hint */}
+                    <p className="mb-2 text-center text-[0.6rem] font-bold uppercase tracking-[0.2em] text-white/25 sm:hidden">
+                      ← Swipe to scroll days →
+                    </p>
+
                     {/* Attendance bar chart */}
                     <div
-                      className="relative overflow-x-auto rounded-lg border border-white/[0.07]"
+                      className="relative rounded-lg border border-white/[0.07]"
                       style={{ background: "rgba(8,8,18,0.80)" }}
                       onMouseLeave={() => setActiveDay(null)}
                     >
+                      <div
+                        className="overflow-x-auto overflow-y-hidden"
+                        style={{ WebkitOverflowScrolling: "touch", overscrollBehaviorX: "contain", touchAction: "pan-x pan-y" }}
+                      >
                       <div className="relative" style={{ minWidth: chartMinWidth, height: 220, padding: "16px 16px 0" }}>
                         {/* Y-axis grid lines */}
                         <div className="pointer-events-none absolute inset-x-4 top-4" style={{ bottom: 52 }}>
@@ -863,6 +872,13 @@ export default function UserPortal() {
                           );
                         })()}
                       </div>
+                      </div>
+
+                      {/* Right-edge fade — signals more days to scroll on mobile */}
+                      <div
+                        className="pointer-events-none absolute right-0 sm:hidden"
+                        style={{ top: 0, height: 220, width: 30, background: "linear-gradient(to left, rgba(8,8,18,0.92), transparent)", borderTopRightRadius: 8 }}
+                      />
 
                       {/* Legend — one chip per muscle group */}
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
